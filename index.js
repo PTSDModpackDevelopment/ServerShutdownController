@@ -1,8 +1,8 @@
 const minecraftPath = "."
 const minecraftCommand = "LaunchServer.sh"
 
-const timeToWaitMs = 60000
-const timeBetweenChecksMs = 1000
+let timeToWaitMs = 60000
+let timeBetweenChecksMs = 1000
 
 const ps = require("ps-node")
 const fs = require("fs")
@@ -49,6 +49,29 @@ function checkForExit(){
         console.log("Still waiting for minecraft to exit...")
     }
 }
+
+function assignNumericGlobal(newValue, defaultValue){
+   newValue = Number(newValue)
+   return !isNaN(newValue) ? newValue : defaultValue
+}
+
+function getGlobalsFromArgs(args){
+    for(let currentArgument = 0; currentArgument < args.length; currentArgument++){
+        switch(args[currentArgument]){
+            case "--ttw":
+                currentArgument++;
+                timeToWaitMs = assignNumericGlobal(args[currentArgument], timeToWaitMs);
+                break;
+            case "--tbc":
+                currentArgument++;
+                timeBetweenChecksMs = assignNumericGlobal(args[currentArgument], timeBetweenChecksMs);
+                break;
+        }
+    }
+}
+
+//Init
+getGlobalsFromArgs(process.argv)
 
 //loop
 console.log("Waiting for minecraft to exit...")
