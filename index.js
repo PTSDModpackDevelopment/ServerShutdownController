@@ -1,4 +1,4 @@
-const minecraftPath = "."
+let minecraftPath = "."
 const minecraftCommand = "LaunchServer.sh"
 
 let timeToWaitMs = 60000
@@ -58,14 +58,18 @@ function assignNumericGlobal(newValue, defaultValue){
 function getGlobalsFromArgs(args){
     for(let currentArgument = 0; currentArgument < args.length; currentArgument++){
         switch(args[currentArgument]){
+            case "--mcdir":
+                currentArgument++
+                minecraftPath = args[currentArgument]
+                break
             case "--ttw":
-                currentArgument++;
-                timeToWaitMs = assignNumericGlobal(args[currentArgument], timeToWaitMs);
-                break;
+                currentArgument++
+                timeToWaitMs = assignNumericGlobal(args[currentArgument], timeToWaitMs)
+                break
             case "--tbc":
-                currentArgument++;
-                timeBetweenChecksMs = assignNumericGlobal(args[currentArgument], timeBetweenChecksMs);
-                break;
+                currentArgument++
+                timeBetweenChecksMs = assignNumericGlobal(args[currentArgument], timeBetweenChecksMs)
+                break
         }
     }
 }
