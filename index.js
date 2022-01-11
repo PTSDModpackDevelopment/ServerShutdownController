@@ -1,17 +1,24 @@
-const minecraftPath = "../mcjunzel/JunzelEternal"
-const minecraftCommand = "notepad" //Debug
+const minecraftPath = "."
+const minecraftCommand = "LaunchServer.sh"
+
 const timeToWaitMs = 60000
 const timeBetweenChecksMs = 1000
 
 const ps = require("ps-node")
 const fs = require("fs")
 
-let latestIndicatesExit = false;
-function checkLatestForExit(){
-    latestIndicatesExit = true
+let latestIndicatesExit = false
+function checkLatestForExit(error, content){
+    const lines = content.split("\n")
+    const stopMessages = lines.slice(lines.length -4, lines.length)
+    for(let currentMessage = 0; currentMessage < stopMessages.length; currentMessage++){
+        const messageParts = stopMessages[currentMessage].split(":")
+        stopMessages[currentMessage] = messageParts[messageParts.length -1].trim()
+    }
+    latestIndicatesExit = stopMessages[0] === "Stopping server" && stopMessages[1] === "Saving players" && stopMessages[2] === "Saving worlds"
 }
 
-let serverHasStopped = false;
+let serverHasStopped = false
 let serverPid = 0
 function checkForProcessExit(error, resultList){
     serverHasStopped = resultList.length < 1
@@ -27,19 +34,22 @@ function checkRuntimeLimit(waited, limit){
 }
 
 function checkForExit(){
-    checkLatestForExit()
-    ps.lookup({command: minecraftCommand}, checkForProcessExit)
-    if(latestIndicatesExit && serverHasStopped){
+    if(!latestIndicatesExit){
+        fs.readFile(minecraftPath + "/logs/latest.log", 'utf8', checkLatestForExit)
+    }if(!serverHasStopped){
+        ps.lookup({command: minecraftCommand}, checkForProcessExit)
+    }if(latestIndicatesExit && serverHasStopped){
         console.log("Minecraft exited normally.")
         process.exit(0)
     }else if(checkRuntimeLimit(timeBetweenChecksMs, timeToWaitMs)){
-        console.log("Waited to long. Killing server.")
+        console.log("Waited to long. Killing server")
         ps.kill(serverPid, 'SIGKILL', () => console.log("Server killed!"))
+        process.exit(1)
     }else{
         console.log("Still waiting for minecraft to exit...")
     }
 }
 
-//Init
+//loop
 console.log("Waiting for minecraft to exit...")
 setInterval(checkForExit, timeBetweenChecksMs)
