@@ -45,7 +45,9 @@ function checkForExit(){
         process.exit(0)
     }else if(checkRuntimeLimit(timeBetweenChecksMs, timeToWaitMs)){
         console.log("Waited to long. Killing server")
-        ps.kill(serverPid, 'SIGKILL', () => console.log("Server killed!"))
+        if(serverPid !== 0){
+            ps.kill(serverPid, 'SIGKILL', () => console.log("Server killed!"))
+        }
         process.exit(1)
     }else{
         console.log("Still waiting for minecraft to exit...")
