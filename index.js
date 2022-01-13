@@ -1,5 +1,5 @@
 let minecraftPath = "."
-const minecraftCommand = "LaunchServer.sh"
+let minecraftCommand = "LaunchServer.sh"
 
 let timeToWaitMs = 60000
 let timeBetweenChecksMs = 1000
@@ -38,7 +38,9 @@ function checkForExit(){
         fs.readFile(minecraftPath + "/logs/latest.log", 'utf8', checkLatestForExit)
     }if(!serverHasStopped){
         ps.lookup({command: minecraftCommand}, checkForProcessExit)
-    }if(latestIndicatesExit && serverHasStopped){
+    }
+
+    if(latestIndicatesExit && serverHasStopped){
         console.log("Minecraft exited normally.")
         process.exit(0)
     }else if(checkRuntimeLimit(timeBetweenChecksMs, timeToWaitMs)){
@@ -53,6 +55,13 @@ function checkForExit(){
 function assignNumericGlobal(newValue, defaultValue){
    newValue = Number(newValue)
    return !isNaN(newValue) ? newValue : defaultValue
+}
+
+function assignStringGlobal(newValue, defaultValue){
+    if(newValue != null){
+        return newValue
+    }
+    return defaultValue
 }
 
 function getGlobalsFromArgs(args){
@@ -70,6 +79,9 @@ function getGlobalsFromArgs(args){
                 currentArgument++
                 timeBetweenChecksMs = assignNumericGlobal(args[currentArgument], timeBetweenChecksMs)
                 break
+            case "--cmd":
+                currentArgument++
+                minecraftCommand = assignStringGlobal(args[currentArgument], minecraftCommand)
         }
     }
 }
@@ -77,6 +89,6 @@ function getGlobalsFromArgs(args){
 //Init
 getGlobalsFromArgs(process.argv)
 
-//loop
+//Loop
 console.log("Waiting for minecraft to exit...")
 setInterval(checkForExit, timeBetweenChecksMs)
