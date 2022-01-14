@@ -32,7 +32,6 @@ let serverPid = 0
 function getPidFromSystemdOutput(systemdOutput){
     let pidStart = systemdOutput.search(processTreeNeedle) + processTreeNeedle.length
     if(pidStart === -1){
-        console.log(1)
         return 0
     }
 
