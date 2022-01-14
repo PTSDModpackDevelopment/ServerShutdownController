@@ -1,7 +1,3 @@
-const systemdCommand = "systemctl status"
-const processTreeNeedle = "Main PID: "
-let minecraftServiceName = "minecraft.service"
-
 let pathToLatest = "./logs/latest.log"
 
 let timeToWaitMs = 60000
@@ -9,7 +5,8 @@ let timeBetweenChecksMs = 1000
 
 const ps = require("ps-node")
 const fs = require("fs")
-const childProcess = require("child_process")
+
+let checkTask
 
 let latestIndicatesExit = false
 function checkLatestForExit(error, content){
@@ -28,31 +25,6 @@ function checkLatestForExit(error, content){
 
 let serverHasStopped = false
 let serverPid = 0
-
-function getPidFromSystemdOutput(systemdOutput){
-    let pidStart = systemdOutput.search(processTreeNeedle) + processTreeNeedle.length
-    if(pidStart === -1){
-        return 0
-    }
-
-    let pidEnd = systemdOutput.substring(pidStart).search(" ")+pidStart
-    if(pidEnd === -1){
-        return 0
-    }
-
-    let pid = parseInt(systemdOutput.substring(pidStart, pidEnd))
-    if(isNaN(pid)){
-        return 0
-    }
-    return pid
-}
-
-function getPidFromSystemd(error, stdout, stderr){
-    if(stdout != null){
-        serverPid = getPidFromSystemdOutput(stdout)
-    }
-}
-
 function checkForProcessExit(error, resultList){
     return resultList.length < 1
 }
@@ -63,18 +35,20 @@ function checkRuntimeLimit(waited, limit){
     return timePassed > limit
 }
 
+let serverExitedCorrectly
 function checkForExit(){
     if(!latestIndicatesExit){
         fs.readFile(pathToLatest, 'utf8', checkLatestForExit)
     }if(!serverHasStopped && serverPid === 0){
-        childProcess.exec(systemdCommand + " " + minecraftServiceName, getPidFromSystemd)
+        serverPid = process.ppid
     }if(!serverHasStopped && serverPid !== 0){
         ps.lookup({pid: serverPid}, checkForProcessExit)
     }
-
-    if(latestIndicatesExit || serverHasStopped){
+    serverExitedCorrectly = latestIndicatesExit || serverHasStopped
+    if(serverExitedCorrectly){
         console.log("Minecraft exited normally.")
-        process.exit(0)
+        process.exitCode = 0
+        clearInterval(checkTask)
     }else if(checkRuntimeLimit(timeBetweenChecksMs, timeToWaitMs)){
         console.log("Waited to long. Killing server")
         if(serverPid === 0){
@@ -82,7 +56,8 @@ function checkForExit(){
         }else{
             ps.kill(serverPid, 'SIGKILL', () => console.log("Server killed!"))
         }
-        process.exit(1)
+        process.exitCode = 1
+        clearInterval(checkTask)
     }else{
         console.log("Still waiting for minecraft to exit...")
     }
@@ -91,13 +66,6 @@ function checkForExit(){
 function assignNumericGlobal(newValue, defaultValue){
    newValue = Number(newValue)
    return !isNaN(newValue) ? newValue : defaultValue
-}
-
-function assignStringGlobal(newValue, defaultValue){
-    if(newValue != null){
-        return newValue
-    }
-    return defaultValue
 }
 
 function getGlobalsFromArgs(args){
@@ -119,10 +87,6 @@ function getGlobalsFromArgs(args){
                 currentArgument++
                 serverPid = assignNumericGlobal(args[currentArgument], serverPid)
                 break
-            case "--service":
-                currentArgument++
-                minecraftServiceName = assignStringGlobal(args[currentArgument], minecraftServiceName)
-                break
         }
     }
 }
@@ -132,4 +96,4 @@ getGlobalsFromArgs(process.argv)
 
 //Loop
 console.log("Waiting for minecraft to exit...")
-setInterval(checkForExit, timeBetweenChecksMs)
+checkTask = setInterval(checkForExit, timeBetweenChecksMs)
