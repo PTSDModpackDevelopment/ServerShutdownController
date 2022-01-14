@@ -1,14 +1,22 @@
-let minecraftPath = "."
-let minecraftCommand = "LaunchServer.sh"
+const systemdCommand = "systemctl status"
+const processTreeNeedle = "Main PID: "
+let minecraftServiceName = "minecraft.service"
+
+let pathToLatest = "./logs/latest.log"
 
 let timeToWaitMs = 60000
 let timeBetweenChecksMs = 1000
 
 const ps = require("ps-node")
 const fs = require("fs")
+const childProcess = require("child_process")
 
 let latestIndicatesExit = false
 function checkLatestForExit(error, content){
+    if(content == null){
+        latestIndicatesExit = false
+        return
+    }
     const lines = content.split("\n")
     const stopMessages = lines.slice(lines.length -4, lines.length)
     for(let currentMessage = 0; currentMessage < stopMessages.length; currentMessage++){
@@ -20,11 +28,34 @@ function checkLatestForExit(error, content){
 
 let serverHasStopped = false
 let serverPid = 0
-function checkForProcessExit(error, resultList){
-    serverHasStopped = resultList.length < 1
-    if(!serverHasStopped){
-        serverPid = resultList[0].pid
+
+function getPidFromSystemdOutput(systemdOutput){
+    let pidStart = systemdOutput.search(processTreeNeedle) + processTreeNeedle.length
+    if(pidStart === -1){
+        console.log(1)
+        return 0
     }
+
+    let pidEnd = systemdOutput.substring(pidStart).search(" ")+pidStart
+    if(pidEnd === -1){
+        return 0
+    }
+
+    let pid = parseInt(systemdOutput.substring(pidStart, pidEnd))
+    if(isNaN(pid)){
+        return 0
+    }
+    return pid
+}
+
+function getPidFromSystemd(error, stdout, stderr){
+    if(stdout != null){
+        serverPid = getPidFromSystemdOutput(stdout)
+    }
+}
+
+function checkForProcessExit(error, resultList){
+    return resultList.length < 1
 }
 
 let timePassed = 0;
@@ -35,17 +66,21 @@ function checkRuntimeLimit(waited, limit){
 
 function checkForExit(){
     if(!latestIndicatesExit){
-        fs.readFile(minecraftPath + "/logs/latest.log", 'utf8', checkLatestForExit)
-    }if(!serverHasStopped){
-        ps.lookup({command: minecraftCommand}, checkForProcessExit)
+        fs.readFile(pathToLatest, 'utf8', checkLatestForExit)
+    }if(!serverHasStopped && serverPid === 0){
+        childProcess.exec(systemdCommand + " " + minecraftServiceName, getPidFromSystemd)
+    }if(!serverHasStopped && serverPid !== 0){
+        ps.lookup({pid: serverPid}, checkForProcessExit)
     }
 
-    if(latestIndicatesExit && serverHasStopped){
+    if(latestIndicatesExit || serverHasStopped){
         console.log("Minecraft exited normally.")
         process.exit(0)
     }else if(checkRuntimeLimit(timeBetweenChecksMs, timeToWaitMs)){
         console.log("Waited to long. Killing server")
-        if(serverPid !== 0){
+        if(serverPid === 0){
+            console.log("could not kill server. Pid not found")
+        }else{
             ps.kill(serverPid, 'SIGKILL', () => console.log("Server killed!"))
         }
         process.exit(1)
@@ -69,9 +104,9 @@ function assignStringGlobal(newValue, defaultValue){
 function getGlobalsFromArgs(args){
     for(let currentArgument = 0; currentArgument < args.length; currentArgument++){
         switch(args[currentArgument]){
-            case "--mcdir":
+            case "--latest":
                 currentArgument++
-                minecraftPath = args[currentArgument]
+                pathToLatest = args[currentArgument]
                 break
             case "--ttw":
                 currentArgument++
@@ -81,9 +116,14 @@ function getGlobalsFromArgs(args){
                 currentArgument++
                 timeBetweenChecksMs = assignNumericGlobal(args[currentArgument], timeBetweenChecksMs)
                 break
-            case "--cmd":
+            case "--pid":
                 currentArgument++
-                minecraftCommand = assignStringGlobal(args[currentArgument], minecraftCommand)
+                serverPid = assignNumericGlobal(args[currentArgument], serverPid)
+                break
+            case "--service":
+                currentArgument++
+                minecraftServiceName = assignStringGlobal(args[currentArgument], minecraftServiceName)
+                break
         }
     }
 }
