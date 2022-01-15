@@ -1,4 +1,5 @@
-let pathToLatest = "./logs/latest.log"
+let pathToMinecraftLatest = "./logs/latest.log"
+let pathToMyLatest = "latest.log"
 
 let timeToWaitMs = 60000
 let timeBetweenChecksMs = 1000
@@ -35,10 +36,15 @@ function checkRuntimeLimit(waited, limit){
     return timePassed > limit
 }
 
+function log(content){
+    fs.appendFile(pathToMyLatest, content + "\n", () => {})
+    console.log(content)
+}
+
 let serverExitedCorrectly
 function checkForExit(){
     if(!latestIndicatesExit){
-        fs.readFile(pathToLatest, 'utf8', checkLatestForExit)
+        fs.readFile(pathToMinecraftLatest, 'utf8', checkLatestForExit)
     }if(!serverHasStopped && serverPid === 0){
         serverPid = process.ppid
     }if(!serverHasStopped && serverPid !== 0){
@@ -46,21 +52,25 @@ function checkForExit(){
     }
     serverExitedCorrectly = latestIndicatesExit || serverHasStopped
     if(serverExitedCorrectly){
-        console.log("Minecraft exited normally.")
+        log("Minecraft exited normally.")
         process.exitCode = 0
         clearInterval(checkTask)
     }else if(checkRuntimeLimit(timeBetweenChecksMs, timeToWaitMs)){
-        console.log("Waited to long. Killing server")
+        log("Waited to long. Killing server")
         if(serverPid === 0){
-            console.log("could not kill server. Pid not found")
+            log("could not kill server. Pid not found")
         }else{
-            ps.kill(serverPid, 'SIGKILL', () => console.log("Server killed!"))
+            ps.kill(serverPid, 'SIGKILL', () => log("Server killed!"))
         }
         process.exitCode = 1
         clearInterval(checkTask)
     }else{
-        console.log("Still waiting for minecraft to exit...")
+        log("Still waiting for minecraft to exit...")
     }
+}
+
+function assignStringGlobal(newValue, defaultValue){
+    return newValue != null ? newValue : defaultValue
 }
 
 function assignNumericGlobal(newValue, defaultValue){
@@ -71,9 +81,13 @@ function assignNumericGlobal(newValue, defaultValue){
 function getGlobalsFromArgs(args){
     for(let currentArgument = 0; currentArgument < args.length; currentArgument++){
         switch(args[currentArgument]){
-            case "--latest":
+            case "--mclatest":
                 currentArgument++
-                pathToLatest = args[currentArgument]
+                pathToMinecraftLatest = assignStringGlobal(args[currentArgument], pathToMinecraftLatest)
+                break
+            case "--mylatest":
+                currentArgument++
+                pathToMyLatest = assignStringGlobal(args[currentArgument], pathToMyLatest)
                 break
             case "--ttw":
                 currentArgument++
@@ -95,5 +109,5 @@ function getGlobalsFromArgs(args){
 getGlobalsFromArgs(process.argv)
 
 //Loop
-console.log("Waiting for minecraft to exit...")
+log("Waiting for minecraft to exit...")
 checkTask = setInterval(checkForExit, timeBetweenChecksMs)
