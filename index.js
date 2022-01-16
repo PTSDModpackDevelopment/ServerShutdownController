@@ -4,8 +4,15 @@ let pathToMyLatest = "latest.log"
 let timeToWaitMs = 60000
 let timeBetweenChecksMs = 1000
 
+let minecraftService = "minecraft.service"
+const systemdCommand = "systemctl status"
+const processTreeNeedle = "Main PID: "
+
+let minecraftCommand = "calc"
+
 const ps = require("ps-node")
 const fs = require("fs")
+const childProcess = require("child_process")
 
 let checkTask
 
@@ -24,8 +31,64 @@ function checkLatestForExit(error, content){
     latestIndicatesExit = stopMessages[0] === "Stopping server" && stopMessages[1] === "Saving players" && stopMessages[2] === "Saving worlds"
 }
 
+const noPid = 0
+let serverPid = noPid
+function setServerPidToParentPid(){
+    serverPid = process.ppid
+}
+
+function getServerPidFromSystemdOutput(systemdOutput){
+    let pidStart = systemdOutput.search(processTreeNeedle) + processTreeNeedle.length
+    if(pidStart === -1){
+        return noPid
+    }
+
+    let pidEnd = systemdOutput.substring(pidStart).search(" ")+pidStart
+    if(pidEnd === -1){
+        return noPid
+    }
+
+    let pid = parseInt(systemdOutput.substring(pidStart, pidEnd))
+    if(isNaN(pid)){
+        return noPid
+    }
+    return pid
+}
+
+function setServerPidFromSystemdOutput(){
+    childProcess.exec(systemdCommand + " " + minecraftService, (error, stdout, stderr) => serverPid = getServerPidFromSystemdOutput(stdout))
+}
+
+function setServerPidFromCommandLookup(){
+    ps.lookup({command: minecraftCommand}, (error, psList) => serverPid = error == null && psList.length > 0 ? psList[0] : noPid)
+}
+
+const pidGetter = [
+    setServerPidFromCommandLookup,
+    setServerPidFromSystemdOutput,
+    setServerPidToParentPid
+]
+
+let attemptsMade = 0
+function setServerPid(){
+    if(attemptsMade === 0){
+        let attemptOpportunities = Math.floor(timeToWaitMs / timeBetweenChecksMs)
+        if(attemptOpportunities < pidGetter.length){
+            attemptsMade = pidGetter.length - attemptOpportunities
+        }
+    }
+    if(attemptsMade >= pidGetter.length){
+        attemptsMade = 0
+    }
+    let lastPid = serverPid
+    pidGetter[attemptsMade]()
+    if(serverPid === noPid){
+        serverPid = lastPid
+    }
+    attemptsMade++
+}
+
 let serverHasStopped = false
-let serverPid = 0
 function checkForProcessExit(error, resultList){
     return resultList.length < 1
 }
@@ -46,7 +109,7 @@ function checkForExit(){
     if(!latestIndicatesExit){
         fs.readFile(pathToMinecraftLatest, 'utf8', checkLatestForExit)
     }if(!serverHasStopped && serverPid === 0){
-        serverPid = process.ppid
+        setServerPid()
     }if(!serverHasStopped && serverPid !== 0){
         ps.lookup({pid: serverPid}, checkForProcessExit)
     }
@@ -100,6 +163,14 @@ function getGlobalsFromArgs(args){
             case "--pid":
                 currentArgument++
                 serverPid = assignNumericGlobal(args[currentArgument], serverPid)
+                break
+            case "--cmd":
+                currentArgument++
+                minecraftCommand = assignStringGlobal(args[currentArgument], minecraftCommand)
+                break
+            case "--service":
+                currentArgument++
+                minecraftService = assignStringGlobal(args[currentArgument], minecraftService)
                 break
         }
     }
